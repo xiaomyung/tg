@@ -26,7 +26,8 @@ timer; no persistent process, no framework — just shell and curl.
   Memory:      3.1G / 7.8G (40%)
   SMART:       sda OK  sdb OK  nvme0n1 OK
   Docker:      8 running, 0 stopped
-  Logins:      apollo  pts/0  2026-03-29 09:14
+  Logins:      3 in last 24h
+               apollo from 192.168.0.138 at 03-29, last 09:14, (3)
 
 🗄 Backups
   server-backup:       OK  2026-03-29 04:00  (14G)
@@ -127,12 +128,19 @@ sudo systemctl list-timers | grep tg-
 | `memory.sh` | `/proc/meminfo` | RAM usage |
 | `smart.sh` | `smartctl -H` | Drive health for sda, sdb, nvme0n1 |
 | `docker.sh` | `docker ps -a` | Running and stopped container counts |
-| `logins.sh` | `last` | Active and recent login sessions |
+| `logins.sh` | `last` | Successful logins in last 24h, grouped by user+IP+date with count |
 | `systemd.sh` | `systemctl --failed` | Failed systemd units (omitted if none) |
 | `backup.sh` | `/var/log/server-backup-cron.log` | Backup job results |
 
 Each check script is independent — a failure in one never blocks the others or
 prevents the report from sending.
+
+## AIDE diff attachment
+
+When AIDE detects unexpected filesystem changes, `report.sh` sends a trimmed
+diff as a file attachment — as a reply to the main report message. Known
+daily changes (`audit.log`, `wtmp.db`) are filtered out automatically; the
+attachment only appears when something genuinely unexpected has changed.
 
 ## Adding a new check
 
