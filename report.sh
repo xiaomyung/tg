@@ -47,6 +47,47 @@ if [[ -z "${TG_CHAT_ID:-}" || "$TG_CHAT_ID" == "REPLACE_ME" ]]; then
   exit 1
 fi
 
+# ── AIDE attachment ───────────────────────────────────────────────────────────
+
+# Sends a trimmed AIDE diff as a file attachment, as a reply to the main message.
+# Only fires when there are changes beyond the expected daily baseline
+# (audit.log and wtmp.db are filtered out as known-changing files).
+# Args: $1 — message_id to reply to (optional; omit to send without threading)
+send_aide_attachment() {
+  local reply_to_id="${1:-}"
+  local log="/var/log/aide/aide-$(date +%Y-%m-%d).log"
+  [[ -f "$log" && -s "$log" ]] || log="/var/log/aide/aide.log"
+  [[ -f "$log" && -s "$log" ]] || return 0
+
+  local aide_diff
+  aide_diff=$(awk '/^(Added|Removed|Changed) entries:/{found=1} found{print}' "$log" \
+    | grep -vE '/var/log/audit/audit\.log|/var/log/wtmp\.db' \
+    || true)
+
+  # Skip if only section headers and separators remain
+  local meaningful
+  meaningful=$(echo "$aide_diff" \
+    | grep -vE '^(Added|Removed|Changed) entries:|^-{10,}|^[[:space:]]*$' \
+    || true)
+  [[ -z "$meaningful" ]] && return 0
+
+  local tmpfile
+  tmpfile=$(mktemp /tmp/aide-diff-XXXXXX.log)
+  echo "$aide_diff" > "$tmpfile"
+
+  local extra_args=()
+  [[ -n "$reply_to_id" ]] && extra_args+=(-F "reply_to_message_id=${reply_to_id}")
+
+  curl -s -o /dev/null \
+    -F "chat_id=${TG_CHAT_ID}" \
+    -F "document=@${tmpfile}" \
+    -F "caption=AIDE diff — $(date '+%Y-%m-%d %H:%M')" \
+    "${extra_args[@]}" \
+    "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" || true
+
+  rm -f "$tmpfile"
+}
+
 # ── Run checks ────────────────────────────────────────────────────────────────
 
 # Helper: run a check script, capture output, never fail.
@@ -125,8 +166,8 @@ MSG="🏠 Homelab Report — ${DATE} ${TIME}
 
 # parse_mode=HTML enables <pre> monospace blocks.
 # --data-urlencode safely handles any characters in the message text.
-# -o /dev/null suppresses response body; -w shows HTTP status for logging.
-HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+# Capture full JSON response to extract message_id for reply threading.
+RESPONSE=$(curl -s -w "\n%{http_code}" \
   --data-urlencode "chat_id=${TG_CHAT_ID}" \
   --data-urlencode "text=${MSG}" \
   --data-urlencode "parse_mode=HTML" \
@@ -135,9 +176,17 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   exit 0
 }
 
+HTTP_STATUS=$(echo "$RESPONSE" | tail -n1)
+RESPONSE_BODY=$(echo "$RESPONSE" | head -n-1)
+
 if [[ "$HTTP_STATUS" != "200" ]]; then
   echo "WARNING: Telegram API returned HTTP ${HTTP_STATUS}" >&2
 fi
+
+# Extract message_id so the AIDE attachment is sent as a reply (visually linked)
+MSG_ID=$(echo "$RESPONSE_BODY" | grep -o '"message_id":[0-9]*' | grep -o '[0-9]*' || true)
+
+send_aide_attachment "$MSG_ID"
 
 # Always exit 0 — a failed send should not be treated as a systemd unit failure
 exit 0
