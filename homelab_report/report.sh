@@ -47,6 +47,41 @@ if [[ -z "${TG_CHAT_ID:-}" || "$TG_CHAT_ID" == "REPLACE_ME" ]]; then
   exit 1
 fi
 
+# ── AIDE attachment ───────────────────────────────────────────────────────────
+
+# Sends a trimmed AIDE diff as a file attachment after the main message.
+# Only fires when there are changes beyond the expected daily baseline
+# (audit.log and wtmp.db are filtered out as known-changing files).
+send_aide_attachment() {
+  local log="/var/log/aide/aide-$(date +%Y-%m-%d).log"
+  [[ -f "$log" && -s "$log" ]] || log="/var/log/aide/aide.log"
+  [[ -f "$log" && -s "$log" ]] || return 0
+
+  local diff
+  diff=$(awk '/^(Added|Removed|Changed) entries:/{found=1} found{print}' "$log" \
+    | grep -v '/var/log/audit/audit\.log\|/var/log/wtmp\.db' \
+    || true)
+
+  # Skip if only section headers and separators remain
+  local meaningful
+  meaningful=$(echo "$diff" \
+    | grep -vE '^(Added|Removed|Changed) entries:|^-{10,}|^[[:space:]]*$' \
+    || true)
+  [[ -z "$meaningful" ]] && return 0
+
+  local tmpfile
+  tmpfile=$(mktemp /tmp/aide-diff-XXXXXX.log)
+  echo "$diff" > "$tmpfile"
+
+  curl -s -o /dev/null \
+    -F "chat_id=${TG_CHAT_ID}" \
+    -F "document=@${tmpfile}" \
+    -F "caption=AIDE diff — $(date '+%Y-%m-%d %H:%M')" \
+    "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" || true
+
+  rm -f "$tmpfile"
+}
+
 # ── Run checks ────────────────────────────────────────────────────────────────
 
 # Helper: run a check script, capture output, never fail.
@@ -138,6 +173,8 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
 if [[ "$HTTP_STATUS" != "200" ]]; then
   echo "WARNING: Telegram API returned HTTP ${HTTP_STATUS}" >&2
 fi
+
+send_aide_attachment
 
 # Always exit 0 — a failed send should not be treated as a systemd unit failure
 exit 0

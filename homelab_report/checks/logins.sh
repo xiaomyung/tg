@@ -65,15 +65,40 @@ fi
 
 printf "  %-8s   %s\n" "Logins:" "${COUNT} in last 24h"
 
+declare -A counts
+declare -A latest
+declare -a order
+
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   parse_line "$line"
-  DATETIME=$(date -d "$TS" '+%m-%d %H:%M' 2>/dev/null || echo "?")
-  if [[ -z "$SOURCE" ]]; then
-    printf "%s%s at %s (local)\n" "$INDENT" "$USER" "$DATETIME"
-  elif [[ "$SOURCE" =~ ^(:[0-9]|tty|pts) ]]; then
-    printf "%s%s at %s (console)\n" "$INDENT" "$USER" "$DATETIME"
-  else
-    printf "%s%s from %s at %s\n" "$INDENT" "$USER" "$SOURCE" "$DATETIME"
+  DATE=$(date -d "$TS" '+%m-%d' 2>/dev/null || echo "?")
+  TIME=$(date -d "$TS" '+%H:%M' 2>/dev/null || echo "?")
+  KEY="${USER}|${SOURCE}|${DATE}"
+  if [[ -z "${counts[$KEY]+x}" ]]; then
+    order+=("$KEY")
+    counts[$KEY]=0
+    latest[$KEY]="$TIME"
   fi
+  counts[$KEY]=$(( counts[$KEY] + 1 ))
 done <<< "$TODAYS"
+
+mapfile -t sorted_keys < <(
+  for KEY in "${order[@]}"; do
+    IFS='|' read -r u src dt <<< "$KEY"
+    echo "${counts[$KEY]}|${dt}|${KEY}"
+  done | sort -t'|' -k1,1rn -k2,2r | awk -F'|' '{print $3"|"$4"|"$5}'
+)
+
+for KEY in "${sorted_keys[@]}"; do
+  IFS='|' read -r u src dt <<< "$KEY"
+  CNT=${counts[$KEY]}
+  LT=${latest[$KEY]}
+  if [[ -z "$src" ]]; then
+    printf "%s%s at %s, last %s, (%s) (local)\n"   "$INDENT" "$u" "$dt" "$LT" "$CNT"
+  elif [[ "$src" =~ ^(:[0-9]|tty|pts) ]]; then
+    printf "%s%s at %s, last %s, (%s) (console)\n" "$INDENT" "$u" "$dt" "$LT" "$CNT"
+  else
+    printf "%s%s from %s at %s, last %s, (%s)\n"   "$INDENT" "$u" "$src" "$dt" "$LT" "$CNT"
+  fi
+done
