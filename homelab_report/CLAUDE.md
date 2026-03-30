@@ -182,6 +182,29 @@ covers everything: suspicious files, rootkit signatures, config mismatches.
 
 ---
 
+## AIDE exclusion management
+
+Exclusions: `/etc/aide/aide.conf.d/99-exclusions` — categorised drop-in config, safe to edit (not a package script). Spaces in paths must be `\ ` escaped.
+
+**Expected daily baseline:** `audit.log` changed (grows with auditd events — intentionally monitored as a tamper-evident file).
+
+**After intentional changes** (new service, config edits, package installs):
+```bash
+sudo aide-accept   # /usr/local/bin/aide-accept — baseline only
+sudo aide-check    # /usr/local/bin/aide-check  — accept + scan + send report
+```
+
+**AIDE diff attachment:** `report.sh` sends a trimmed AIDE diff as a Telegram file attachment after the main message. Filters out `audit.log` and `wtmp.db` (expected daily baseline) — only fires when unexpected changes remain.
+
+**Trigger a fresh scan manually:**
+```bash
+sudo systemctl reset-failed dailyaidecheck.service
+sudo systemctl start dailyaidecheck.service
+journalctl -fu dailyaidecheck.service
+```
+
+---
+
 ## rkhunter setup
 
 rkhunter's daily cron is enabled via `/etc/default/rkhunter`:

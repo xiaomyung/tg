@@ -49,30 +49,31 @@ fi
 
 # ── AIDE attachment ───────────────────────────────────────────────────────────
 
-# Sends a trimmed AIDE diff as a file attachment after the main message.
+# Sends a trimmed AIDE diff as a file attachment, as a reply to the main message.
 # Only fires when there are changes beyond the expected daily baseline
 # (audit.log and wtmp.db are filtered out as known-changing files).
+# Args: $1 — message_id to reply to (optional; omit to send without threading)
 send_aide_attachment() {
   local reply_to_id="${1:-}"
   local log="/var/log/aide/aide-$(date +%Y-%m-%d).log"
   [[ -f "$log" && -s "$log" ]] || log="/var/log/aide/aide.log"
   [[ -f "$log" && -s "$log" ]] || return 0
 
-  local diff
-  diff=$(awk '/^(Added|Removed|Changed) entries:/{found=1} found{print}' "$log" \
-    | grep -v '/var/log/audit/audit\.log\|/var/log/wtmp\.db' \
+  local aide_diff
+  aide_diff=$(awk '/^(Added|Removed|Changed) entries:/{found=1} found{print}' "$log" \
+    | grep -vE '/var/log/audit/audit\.log|/var/log/wtmp\.db' \
     || true)
 
   # Skip if only section headers and separators remain
   local meaningful
-  meaningful=$(echo "$diff" \
+  meaningful=$(echo "$aide_diff" \
     | grep -vE '^(Added|Removed|Changed) entries:|^-{10,}|^[[:space:]]*$' \
     || true)
   [[ -z "$meaningful" ]] && return 0
 
   local tmpfile
   tmpfile=$(mktemp /tmp/aide-diff-XXXXXX.log)
-  echo "$diff" > "$tmpfile"
+  echo "$aide_diff" > "$tmpfile"
 
   local extra_args=()
   [[ -n "$reply_to_id" ]] && extra_args+=(-F "reply_to_message_id=${reply_to_id}")
