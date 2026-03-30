@@ -44,7 +44,7 @@ parse_line() {
 }
 
 TODAYS=$(last --time-format iso 2>/dev/null \
-  | grep -v "^reboot\|^wtmp" \
+  | grep -vE "^reboot|^wtmp" \
   | while IFS= read -r line; do
       [[ -z "$line" ]] && continue
       parse_line "$line"
