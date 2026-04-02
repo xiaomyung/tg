@@ -59,31 +59,77 @@ send_aide_attachment() {
   [[ -f "$log" && -s "$log" ]] || log="/var/log/aide/aide.log"
   [[ -f "$log" && -s "$log" ]] || return 0
 
+  # Extract diff sections, filtering out expected daily-baseline files
+  # (audit.log, wtmp.db) including their detail blocks.
   local aide_diff
-  aide_diff=$(awk '/^(Added|Removed|Changed) entries:/{found=1} found{print}' "$log" \
-    | grep -vE '/var/log/audit/audit\.log|/var/log/wtmp\.db' \
-    || true)
+  aide_diff=$(awk '
+    BEGIN {
+      exclude["/var/log/audit/audit.log"] = 1
+      exclude["/var/log/wtmp.db"] = 1
+    }
+    /^(Added|Removed|Changed) entries:/ { in_entries = 1; in_detail = 0; skip_block = 0 }
+    !in_entries { next }
+
+    # Summary lines: "f >b... : /path" — check if path is excluded
+    /^[[:space:]]*[a-z].*: \// {
+      path = $NF
+      if (path in exclude) next
+      print; next
+    }
+
+    # Start of detailed section
+    /^Detailed information about changes:/ {
+      in_detail = 1; skip_block = 0
+      detail_hdr = $0; next
+    }
+
+    # Separator lines — buffer in detail mode, print otherwise
+    /^-{10,}$/ { if (in_detail) { pending_sep = $0; next } else { print; next } }
+
+    # "File: /path" starts a new detail block
+    /^File: / {
+      if ($2 in exclude) { skip_block = 1 } else {
+        skip_block = 0
+        if (detail_hdr != "") { print ""; print detail_hdr; print "---------------------------------------------------"; detail_hdr = "" }
+        if (pending_sep != "") { print pending_sep; pending_sep = "" }
+        print
+      }
+      next
+    }
+
+    # Attribute lines inside a detail block
+    in_detail { if (!skip_block) print; next }
+
+    # Section headers, blank lines, other content
+    { print }
+  ' "$log" || true)
 
   # Skip if only section headers and separators remain
   local meaningful
   meaningful=$(echo "$aide_diff" \
-    | grep -vE '^(Added|Removed|Changed) entries:|^-{10,}|^[[:space:]]*$' \
+    | grep -vE '^(Added|Removed|Changed) entries:|^Detailed information|^-{10,}|^[[:space:]]*$' \
     || true)
   [[ -z "$meaningful" ]] && return 0
 
   local tmpfile
   tmpfile=$(mktemp /tmp/aide-diff-XXXXXX.log)
+  chmod 600 "$tmpfile"
   echo "$aide_diff" > "$tmpfile"
 
   local extra_args=()
   [[ -n "$reply_to_id" ]] && extra_args+=(-F "reply_to_message_id=${reply_to_id}")
 
-  curl -s -o /dev/null \
+  local attach_resp attach_status
+  attach_resp=$(curl -s -w "\n%{http_code}" \
     -F "chat_id=${TG_CHAT_ID}" \
     -F "document=@${tmpfile}" \
     -F "caption=AIDE diff — $(date '+%Y-%m-%d %H:%M')" \
     "${extra_args[@]}" \
-    "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" || true
+    "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument") || true
+  attach_status=$(echo "$attach_resp" | tail -n1)
+  if [[ "$attach_status" != "200" ]]; then
+    echo "WARNING: AIDE attachment send returned HTTP ${attach_status}" >&2
+  fi
 
   rm -f "$tmpfile"
 }
@@ -186,7 +232,9 @@ fi
 # Extract message_id so the AIDE attachment is sent as a reply (visually linked)
 MSG_ID=$(echo "$RESPONSE_BODY" | grep -o '"message_id":[0-9]*' | grep -o '[0-9]*' || true)
 
-send_aide_attachment "$MSG_ID"
+if [[ "$HTTP_STATUS" == "200" ]]; then
+  send_aide_attachment "$MSG_ID"
+fi
 
 # Always exit 0 — a failed send should not be treated as a systemd unit failure
 exit 0
