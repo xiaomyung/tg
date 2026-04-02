@@ -5,6 +5,8 @@
 
 # Local tooling
 .claude/
+CLAUDE.md
+**/CLAUDE.md
 
 # Runtime / state dirs any bot might create
 state/
