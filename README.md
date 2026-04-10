@@ -94,7 +94,7 @@ Description=Homelab Telegram daily report
 
 [Service]
 Type=oneshot
-ExecStart=/bin/bash /srv/services/tg/homelab_report/report.sh
+ExecStart=/bin/bash /path/to/homelab_report/report.sh
 ```
 
 Create `/etc/systemd/system/tg-homelab-report.timer`:
