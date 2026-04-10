@@ -52,8 +52,8 @@ Optional (checks are skipped if not installed):
 **1. Clone and enter the directory**
 
 ```bash
-git clone https://github.com/xiaomyung/tg.git /srv/services/tg
-cd /srv/services/tg/homelab_report
+git clone https://github.com/xiaomyung/homelab_report.git
+cd homelab_report
 ```
 
 **2. Create and secure the credentials file**
