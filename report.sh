@@ -134,6 +134,47 @@ send_aide_attachment() {
   rm -f "$tmpfile"
 }
 
+# ── LLM "at a glance" summary ─────────────────────────────────────────────────
+
+# Sends an LLM-generated anomaly summary as a reply to the main message.
+# Uses the always-on CPU Ollama endpoint at localhost:11435 (independent of
+# llm-mode). Summary script always exits 0 and returns either "✅ All clear",
+# 3–5 bullet anomalies, or "⚠️ Summary unavailable (<reason>)".
+# Args: $1 — message_id to reply to
+#       $2 — HTML-stripped main message to feed the LLM
+send_summary() {
+  local reply_to_id="${1:-}"
+  local plain_msg="${2:-}"
+  [[ -n "$plain_msg" ]] || return 0
+
+  local summary
+  summary=$(printf '%s' "$plain_msg" | bash "${SCRIPT_DIR}/checks/at-a-glance.sh" 2>/dev/null) || return 0
+  [[ -n "$summary" ]] || return 0
+
+  # Escape HTML so <pre> rendering is safe (the LLM could emit characters
+  # Telegram's HTML parser would otherwise swallow).
+  local escaped
+  escaped=$(printf '%s' "$summary" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+
+  local text="🔎 At a glance
+<pre>${escaped}</pre>"
+
+  local extra_args=()
+  [[ -n "$reply_to_id" ]] && extra_args+=(--data-urlencode "reply_to_message_id=${reply_to_id}")
+
+  local resp status
+  resp=$(curl -s -w "\n%{http_code}" \
+    --data-urlencode "chat_id=${TG_CHAT_ID}" \
+    --data-urlencode "text=${text}" \
+    --data-urlencode "parse_mode=HTML" \
+    "${extra_args[@]}" \
+    "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage") || true
+  status=$(echo "$resp" | tail -n1)
+  if [[ "$status" != "200" ]]; then
+    echo "WARNING: summary send returned HTTP ${status}" >&2
+  fi
+}
+
 # ── Run checks ────────────────────────────────────────────────────────────────
 
 # Helper: run a check script, capture output, never fail.
@@ -233,6 +274,10 @@ fi
 MSG_ID=$(echo "$RESPONSE_BODY" | grep -o '"message_id":[0-9]*' | grep -o '[0-9]*' || true)
 
 if [[ "$HTTP_STATUS" == "200" ]]; then
+  # Strip HTML tags and decode the three entities run_check introduces, so the
+  # LLM sees the same text a human would see rendered in Telegram.
+  MSG_PLAIN=$(echo "$MSG" | sed -e 's/<[^>]*>//g' -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&amp;/\&/g')
+  send_summary "$MSG_ID" "$MSG_PLAIN"
   send_aide_attachment "$MSG_ID"
 fi
 
