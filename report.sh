@@ -47,6 +47,14 @@ if [[ -z "${TG_CHAT_ID:-}" || "$TG_CHAT_ID" == "REPLACE_ME" ]]; then
   exit 1
 fi
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+# Escape the three HTML entities Telegram's <pre> block interprets literally.
+# Reads stdin, writes stdout.
+html_escape() {
+  sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+}
+
 # ── AIDE attachment ───────────────────────────────────────────────────────────
 
 # Sends a trimmed AIDE diff as a file attachment, as a reply to the main message.
@@ -154,7 +162,7 @@ send_summary() {
   # Escape HTML so <pre> rendering is safe (the LLM could emit characters
   # Telegram's HTML parser would otherwise swallow).
   local escaped
-  escaped=$(printf '%s' "$summary" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+  escaped=$(printf '%s' "$summary" | html_escape)
 
   local text="🔎 At a glance
 <pre>${escaped}</pre>"
@@ -188,7 +196,7 @@ run_check() {
   local out
   out=$(bash "$script" 2>/dev/null) || out="  [${1}: error — check log for details]"
   # Escape HTML special characters so they render literally inside <pre>
-  echo "$out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+  echo "$out" | html_escape
 }
 
 DATE=$(date +%Y-%m-%d)

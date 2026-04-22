@@ -17,11 +17,11 @@
 
 set -euo pipefail
 
-# --- Uptime ---
+# ── Uptime ──
 UPTIME=$(uptime -p 2>/dev/null | sed 's/^up //')
 printf "  %-8s   %s\n" "Uptime:" "$UPTIME"
 
-# --- Pending reboot ---
+# ── Pending reboot ──
 if [[ -f /var/run/reboot-required ]]; then
   REASON=""
   if [[ -f /var/run/reboot-required.pkgs ]]; then
@@ -33,7 +33,7 @@ else
   printf "  %-8s   %s\n" "Reboot:" "not required"
 fi
 
-# --- Security updates ---
+# ── Security updates ──
 # apt list --upgradable 2>/dev/null suppresses the "WARNING: apt..." CLI warning.
 # We filter lines containing '/.*-security' or '/.*security' in the apt source field.
 SEC_COUNT=$(apt list --upgradable 2>/dev/null | grep -cE '/[^/]*security' || true)

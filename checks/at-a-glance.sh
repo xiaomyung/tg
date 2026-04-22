@@ -9,8 +9,12 @@
 # Always exits 0 — never aborts the report.
 #
 # Uses the always-on CPU Ollama endpoint at localhost:11435 (independent of
-# llm-mode). Model: qwen3-coder:30b. See ../CLAUDE.md "LLM dependency" section.
+# llm-mode). Model: qwen3-coder:30b. See README.md "At a glance summary" section.
 
+# -e intentionally omitted: this script uses explicit `|| { ...; exit 0; }`
+# guards and an `exit 0` at the end, so errexit would conflict with the
+# graceful-failure contract. -u and pipefail stay on to catch unset vars and
+# mid-pipe failures.
 set -uo pipefail
 
 ENDPOINT="http://localhost:11435/api/chat"
@@ -104,8 +108,8 @@ body = {
         {"role": "user",   "content": user_content},
     ],
     "options": {
-        "num_ctx":     8192,
-        "num_predict": 200,
+        "num_ctx":     8192,   # context window; real reports are ~1400 tokens, 8192 gives headroom
+        "num_predict": 200,    # output cap; ✅ All clear is ~5 tokens, 5 bullets is ~100
         "temperature": 0.2,
     },
 }
@@ -135,8 +139,7 @@ CONTENT=$(RESP="$RESPONSE" python3 <<'PY'
 import json, os, sys
 try:
     d = json.loads(os.environ["RESP"])
-except Exception as e:
-    print("", end="")
+except Exception:
     sys.exit(0)
 msg = (d.get("message") or {}).get("content") or ""
 print(msg, end="")

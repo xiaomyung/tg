@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # disk.sh — Disk usage on key mount points
 #
+# Reads:   df -h (live)
 # Output:  "  /path:          N% used (of SIZE)"
 #          Append " ⚠" if usage >= 85%.
 # Format:  printf "  %-13s  %s%s\n"  (values start at column 17)

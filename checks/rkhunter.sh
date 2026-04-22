@@ -4,8 +4,6 @@
 # Reads:   /var/log/rkhunter.log
 # Output:  "  rkhunter:  YYYY-MM-DD · all clear"
 #          "  rkhunter:  YYYY-MM-DD · N warning(s) ⚠"
-#          "  rkhunter:  YYYY-MM-DD · N rootkit(s) found ⚠ · N warning(s) ⚠"
-#          "  rkhunter:  YYYY-MM-DD · N infected ⚠ · N warning(s) ⚠"
 # Format:  printf "  %-9s  %s\n"  (values start at column 13)
 # Test:    sudo bash checks/rkhunter.sh
 # Always exits 0.
