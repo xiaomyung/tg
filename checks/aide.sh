@@ -32,7 +32,7 @@ fi
 # Exit codes 1-7 are the added/removed/changed bitmask; anything above is an
 # error, and "AIDE error output" only appears in error reports.
 EXIT_CODE=$(grep -oP 'AIDE returned with exit code \K[0-9]+' "$LOG" | head -1 || true)
-if grep -q '^AIDE error output' "$LOG" || { [[ -n "$EXIT_CODE" ]] && (( EXIT_CODE > 7 )); }; then
+if grep -q '^AIDE error output (' "$LOG" || { [[ -n "$EXIT_CODE" ]] && (( EXIT_CODE > 7 )); }; then
   printf "  %-9s  scan FAILED (exit code %s) ⚠\n" "AIDE:" "${EXIT_CODE:-?}"
   exit 0
 fi
