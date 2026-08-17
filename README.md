@@ -226,6 +226,9 @@ hook runs) and prunes copies older than 30 days.
 # Run a single check
 sudo bash checks/aide.sh
 
+# Run the AIDE check against a specific log (e.g. a rotated or historical one)
+sudo bash checks/aide.sh /var/log/aide/aide-2026-08-17.log
+
 # Check the last timer run
 journalctl -u tg-homelab-report.service -n 50
 
